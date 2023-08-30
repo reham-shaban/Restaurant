@@ -35,4 +35,4 @@ class CartSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cart
         fields = ['user', 'menuitem', 'quantity', 'unit_price', 'price']
-        read_only_fields = ('user', 'unit_price', 'price')
+        read_only_fields = ('unit_price', 'price')

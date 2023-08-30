@@ -95,6 +95,26 @@ class MenuItemViewSet(viewsets.ModelViewSet):
             permission_classes = [ManagerPermission]
         return [permission() for permission in permission_classes]
 
+# Cart views
+class CartView(APIView):
+    def get(self, request):
+        queryset = Cart.objects.filter(user=self.request.user)
+        serializer = CartSerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def post(self, request):
+        request.data['user'] = self.request.user.id
+        serializer = CartSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def delete(self, request):
+        queryset = Cart.objects.filter(user=self.request.user)
+        queryset.delete()
+        return Response({"message": "cart flushed"}, status=status.HTTP_400_BAD_REQUEST)
 
 # Order views
 class OrderListView(generics.ListCreateAPIView):
@@ -119,19 +139,3 @@ class SingleOrderUpdateView(generics.UpdateAPIView):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
     
- 
-# Cart views
-class CartListView(generics.ListAPIView):
-    serializer_class = CartSerializer
-    
-    def get_queryset(self):
-        queryset = Cart.objects.filter(user=self.request.user)
-        return queryset
-  
-# add to cart
-class CartAddView(APIView):
-    pass
-
-# flush cart
-class CartFlushView(APIView):
-    pass

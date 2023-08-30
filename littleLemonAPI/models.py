@@ -33,6 +33,9 @@ class Cart(models.Model):
         self.price = self.unit_price * self.quantity
         super(Cart, self).save(*args, **kwargs)
         
+    def __str__(self):
+        return f'{self.user.username} - {self.menuitem} - {self.quantity}'
+    
 class Order(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     delivery_crew = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='delivery_crew')
