@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, BasePermission
 
-from .models import MenuItem, Order, Cart
+from .models import MenuItem, Order, OrderItem, Cart
 from .serializers import MenuItemSerializer, UserSerializer, OrderSerializer, CartSerializer
 
 # Create your views here.
@@ -14,11 +14,7 @@ from .serializers import MenuItemSerializer, UserSerializer, OrderSerializer, Ca
 class ManagerPermission(BasePermission):
     def has_permission(self, request, view):
         return request.user.groups.filter(name='Manager').exists()
-
-class DeliveryPermission(BasePermission):
-    def has_permission(self, request, view):
-        return request.user.groups.filter(name='Delivery crew').exists()
-     
+   
       
 # Manger views   
 class ManagerView(APIView):
@@ -95,6 +91,7 @@ class MenuItemViewSet(viewsets.ModelViewSet):
             permission_classes = [ManagerPermission]
         return [permission() for permission in permission_classes]
 
+
 # Cart views
 class CartView(APIView):
     def get(self, request):
@@ -116,26 +113,74 @@ class CartView(APIView):
         queryset.delete()
         return Response({"message": "cart flushed"}, status=status.HTTP_400_BAD_REQUEST)
 
+
 # Order views
-class OrderListView(generics.ListCreateAPIView):
-    serializer_class = OrderSerializer
-    filterset_fields = ['status'] # pending, delivered
-    
-    def get_queryset(self):
+class OrderView(APIView):
+    def get(self, request):
         user = self.request.user
-        if user.groups.filter(name='Managers').exists():
+        # filtering based on user role
+        if user.groups.filter(name='Manager').exists():
             queryset = Order.objects.all()
         elif user.groups.filter(name='Delivery crew').exists():
             queryset = Order.objects.filter(delivery_crew=user)
         else:
             queryset = Order.objects.filter(user=user)
+        
+        # filtering based on status
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset.filter(status=status_filter)
+            
+        # serialize and return queryset
+        serializer = OrderSerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    # create an order of all the cart items of user
+    def post(self, request):
+        user = self.request.user
+        cart_items = Cart.objects.filter(user=user)
+        order = Order.objects.create(user=user, total=0)
+        total_cart = 0
+        
+        # put each cart item as an order item
+        for cart in cart_items:
+            OrderItem.objects.create(
+                order=order,
+                menuitem=cart.menuitem, 
+                quantity=cart.quantity,
+                unit_price=cart.unit_price,
+                price=cart.price
+            )
+            total_cart = total_cart + cart.price
+            cart.delete()
+            
+        # update total price
+        order.total = total_cart
+        order.save()
+        
+        return Response({"message": "order created succesfully"}, status=status.HTTP_201_CREATED)
+            
+class SingleOrderView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = OrderSerializer
+    
+    def get_permissions(self):
+        method = self.request.method
+        if method == 'DELETE':
+            permission_classes = [ManagerPermission]
+        else:
+            permission_classes = [IsAuthenticated]
+        return [permission() for permission in permission_classes]
+    
+    def get_queryset(self):
+        user = self.request.user
+        
+        # filtering based on user role
+        if user.groups.filter(name='Manager').exists():
+            queryset = Order.objects.all()
+        elif user.groups.filter(name='Delivery crew').exists():
+            queryset = Order.objects.filter(delivery_crew=user)
+        else:
+            queryset = Order.objects.filter(user=user)
+            
         return queryset
-   
-class SingleOrderListView(generics.RetrieveAPIView):
-    queryset = Order.objects.all()
-    serializer_class = OrderSerializer
-    
-class SingleOrderUpdateView(generics.UpdateAPIView):
-    queryset = Order.objects.all()
-    serializer_class = OrderSerializer
-    
+
